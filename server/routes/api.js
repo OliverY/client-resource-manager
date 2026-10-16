@@ -7,12 +7,12 @@ const express = require('express');
 const multer = require('multer');
 
 const store = require('../lib/store');
-const { probe } = require('../lib/image');
+const { probe, isVectorLike } = require('../lib/image');
 const { normalizeLogical, validateLogical, androidName, iosName } = require('../lib/naming');
 const { buildSnapshot, diffSnapshots } = require('../lib/snapshot');
 const { buildAndroid } = require('../packagers/android');
 const { buildIos } = require('../packagers/ios');
-const { UPLOAD_DIR, LIB } = require('../config');
+const { DEFAULT_LIB } = require('../config');
 
 const router = express.Router();
 
@@ -33,38 +33,208 @@ function parseUploadName(originalname) {
   return { logical: normalizeLogical(base), scale: 3 };
 }
 
-/** 全量状态：供 Web 面板渲染 */
-router.get('/state', (req, res) => {
-  const db = store.load();
-  res.json({
-    config: {
-      prefix: LIB.prefix,
-      groupId: LIB.groupId,
-      artifactId: LIB.artifactId,
-      iosPackage: LIB.iosPackage,
+/* ================= 项目管理 ================= */
+
+const RE_PREFIX = /^[a-z0-9_]*$/;
+const RE_GROUP_ID = /^[a-zA-Z0-9_.]+$/;
+const RE_ARTIFACT_ID = /^[a-zA-Z0-9_-]+$/;
+const RE_IOS_PACKAGE = /^[A-Za-z][A-Za-z0-9_]*$/;
+
+function pascalCase(id) {
+  return id.split(/[_-]/).map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join('');
+}
+
+/** 按用户输入整理项目字段，缺省项自动推导 */
+function normalizeProjectFields(id, body) {
+  // 未提供 prefix 才按项目 ID 推导；显式传空串表示不要前缀
+  const prefix = body.prefix == null
+    ? `${id}_`
+    : String(body.prefix).trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  const groupId = String(body.groupId ?? '').trim() || DEFAULT_LIB.groupId;
+  const artifactId = String(body.artifactId ?? '').trim() || `${id}-assets`;
+  const iosPackage = String(body.iosPackage ?? '').trim() || pascalCase(id) + DEFAULT_LIB.iosPackageSuffix;
+
+  const issues = [];
+  if (prefix && !RE_PREFIX.test(prefix)) issues.push('资源前缀只能含小写字母、数字、下划线');
+  if (!RE_GROUP_ID.test(groupId)) issues.push('groupId 格式不合法');
+  if (!RE_ARTIFACT_ID.test(artifactId)) issues.push('artifactId 格式不合法');
+  if (!RE_IOS_PACKAGE.test(iosPackage)) issues.push('iOS 包名必须是合法标识符');
+  if (String(body.name ?? '').trim().length > 50) issues.push('项目名称过长（>50 字符）');
+
+  return {
+    issues,
+    fields: {
+      name: String(body.name ?? '').trim() || id,
+      prefix,
+      groupId,
+      artifactId,
+      iosPackage,
     },
-    assets: db.assets.map(publicAsset),
-    // releases 倒序（最新在前）：与 /api/releases 一致，前端「更新对比」默认选中最新一版依赖此顺序
+  };
+}
+
+function publicProject(p, db) {
+  const out = {
+    id: p.id,
+    name: p.name,
+    prefix: p.prefix || '',
+    groupId: p.groupId,
+    artifactId: p.artifactId,
+    iosPackage: p.iosPackage,
+    createdAt: p.createdAt,
+  };
+  if (db) {
+    out.assetCount = db.assets.length;
+    out.releaseCount = db.releases.length;
+    out.latestVersion = db.releases.length ? db.releases[db.releases.length - 1].version : null;
+  }
+  return out;
+}
+
+router.get('/projects', (req, res) => {
+  const projects = store.loadRegistry().map((p) => publicProject(p, store.load(p.id)));
+  res.json({ projects });
+});
+
+router.post('/projects', (req, res) => {
+  const id = String((req.body || {}).id ?? '').trim().toLowerCase();
+  if (!store.isValidProjectId(id)) {
+    return res.status(400).json({ ok: false, error: '项目 ID 必须是小写字母开头，仅含小写字母/数字/下划线/中划线，长度 ≤32' });
+  }
+  const { issues, fields } = normalizeProjectFields(id, req.body || {});
+  if (issues.length) return res.status(400).json({ ok: false, error: issues.join('；') });
+
+  const projects = store.loadRegistry();
+  if (projects.some((p) => p.id === id)) {
+    return res.status(409).json({ ok: false, error: `项目已存在: ${id}` });
+  }
+
+  const project = { id, ...fields, createdAt: new Date().toISOString() };
+  projects.push(project);
+  store.saveRegistry(projects);
+
+  // 预建目录：让静态路由与后续上传/发布开箱即用
+  fs.mkdirSync(store.uploadDir(id), { recursive: true });
+  fs.mkdirSync(store.outputDir(id), { recursive: true });
+
+  res.json({ ok: true, project: publicProject(project, store.EMPTY) });
+});
+
+function resolveProject(req, res, next) {
+  const pid = req.params.pid;
+  if (!store.isValidProjectId(pid)) {
+    return res.status(400).json({ ok: false, error: `非法项目 ID: ${pid}` });
+  }
+  const project = store.findProject(pid);
+  if (!project) return res.status(404).json({ ok: false, error: `项目不存在: ${pid}` });
+  req.project = project;
+  next();
+}
+
+/** 编辑项目：名称 / 资源前缀 / 打包坐标。改前缀只影响之后的发布产物名 */
+router.patch('/projects/:pid', resolveProject, (req, res) => {
+  const { issues, fields } = normalizeProjectFields(req.project.id, req.body || {});
+  if (issues.length) return res.status(400).json({ ok: false, error: issues.join('；') });
+
+  const projects = store.loadRegistry();
+  const idx = projects.findIndex((p) => p.id === req.project.id);
+  projects[idx] = { ...projects[idx], ...fields };
+  store.saveRegistry(projects);
+
+  res.json({ ok: true, project: publicProject(projects[idx], store.load(req.project.id)) });
+});
+
+/* ================= 项目作用域端点 ================= */
+
+const scoped = express.Router({ mergeParams: true });
+scoped.use(resolveProject);
+
+function lib(req) {
+  return store.libOf(req.project);
+}
+
+/**
+ * 未发布的修改：对比最新已发布版本快照与当前资源库。
+ * 上传 / 删除 / 恢复都先落在资源库，发布新版本时才批量提交，此差异即「待保存」的修改。
+ */
+function computePending(db, l) {
+  const latest = store.latestRelease(db);
+  const current = buildSnapshot(db, l);
+  const changelog = diffSnapshots(latest ? latest.assets : [], current);
+  const total = changelog.added.length + changelog.modified.length + changelog.removed.length;
+  return {
+    hasChanges: total > 0,
+    total,
+    added: changelog.added,
+    modified: changelog.modified,
+    removed: changelog.removed,
+    baselineVersion: latest ? latest.version : null,
+  };
+}
+
+/** 全量状态：供 Web 面板渲染 */
+scoped.get('/state', async (req, res) => {
+  const pid = req.project.id;
+  const db = store.load(pid);
+  const l = lib(req);
+
+  // 旧数据回填：上传时还没算「矢量图」标记的资源，按主源图补算一次（幂等）
+  let dirty = false;
+  for (const a of db.assets) {
+    if (a.vectorLike != null) continue;
+    const primary = Object.values(a.sources || {}).sort((x, y) => y.scale - x.scale)[0];
+    a.vectorLike = primary ? await isVectorLike(primary.path) : false;
+    dirty = true;
+  }
+  if (dirty) store.save(pid, db);
+
+  const addedVersion = firstVersionMap(db);
+  res.json({
+    project: publicProject(req.project, db),
+    config: {
+      prefix: l.prefix,
+      groupId: l.groupId,
+      artifactId: l.artifactId,
+      iosPackage: l.iosPackage,
+    },
+    assets: db.assets.map((a) => publicAsset(a, l.prefix, addedVersion.get(a.logical))),
+    // releases 倒序（最新在前）：与 /releases 一致，前端「更新对比」默认选中最新一版依赖此顺序
     releases: db.releases.map(publicRelease).reverse(),
+    pending: computePending(db, l),
   });
 });
 
-function publicAsset(a) {
+function publicAsset(a, prefix, addedVersion) {
   return {
     id: a.id,
     logical: a.logical,
-    androidName: androidName(a.logical, LIB.prefix),
-    iosName: iosName(a.logical, LIB.prefix),
+    androidName: androidName(a.logical, prefix),
+    iosName: iosName(a.logical, prefix),
     format: a.format,
+    // 矢量图（单色图标）：只有这类资源开放着色预览
+    vectorLike: !!a.vectorLike,
     status: a.status,
     width: a.width,
     height: a.height,
     hash: a.hash,
     tags: a.tags || [],
     scales: Object.keys(a.sources || {}).map(Number).sort(),
+    // 首次出现的发布版本；未发布过为 null（前端「按版本」分组用）
+    addedVersion: addedVersion || null,
     createdAt: a.createdAt,
     updatedAt: a.updatedAt,
   };
+}
+
+/** 资源 logical -> 首次包含它的发布版本（按发布时间正序找第一次出现） */
+function firstVersionMap(db) {
+  const map = new Map();
+  for (const r of db.releases) {
+    for (const s of r.assets || []) {
+      if (!map.has(s.logical)) map.set(s.logical, r.version);
+    }
+  }
+  return map;
 }
 
 function publicRelease(r) {
@@ -80,9 +250,11 @@ function publicRelease(r) {
 }
 
 /** 批量上传（设计师） */
-router.post('/assets', upload.array('files'), async (req, res) => {
+scoped.post('/assets', upload.array('files'), async (req, res) => {
   try {
-    const db = store.load();
+    const pid = req.project.id;
+    const uploadRoot = store.uploadDir(pid);
+    const db = store.load(pid);
     const byLogical = new Map();
     const warnings = [];
 
@@ -103,13 +275,13 @@ router.post('/assets', upload.array('files'), async (req, res) => {
       if (issues.length) warnings.push(`${logical}: ${issues.join('；')}`);
 
       const buf = file.buffer;
-      const tmp = path.join(UPLOAD_DIR, `.tmp-${Date.now()}-${logical}@${scale}x.png`);
-      fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+      const tmp = path.join(uploadRoot, `.tmp-${Date.now()}-${logical}@${scale}x.png`);
+      fs.mkdirSync(uploadRoot, { recursive: true });
       fs.writeFileSync(tmp, buf);
       const meta = await probe(tmp);
       fs.rmSync(tmp, { force: true });
 
-      const destDir = path.join(UPLOAD_DIR, logical);
+      const destDir = path.join(uploadRoot, logical);
       fs.mkdirSync(destDir, { recursive: true });
       const dest = path.join(destDir, `source@${scale}x.png`);
       fs.writeFileSync(dest, buf);
@@ -161,12 +333,13 @@ router.post('/assets', upload.array('files'), async (req, res) => {
       asset.height = highest.height;
       asset.sourceScale = highest.scale;
       asset.format = 'png';
+      asset.vectorLike = await isVectorLike(highest.path);
       asset.updatedAt = now;
       if (asset.status === 'removed') asset.status = 'active';
     }
 
-    store.save(db);
-    res.json({ ok: true, created, updated, warnings, assets: db.assets.map(publicAsset) });
+    store.save(pid, db);
+    res.json({ ok: true, created, updated, warnings, assets: db.assets.map((a) => publicAsset(a, lib(req).prefix)) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ ok: false, error: err.message });
@@ -174,33 +347,37 @@ router.post('/assets', upload.array('files'), async (req, res) => {
 });
 
 /** 软删除（标记 removed，不物理删除，保证老版本 App 兼容） */
-router.post('/assets/:logical/remove', (req, res) => {
-  const db = store.load();
+scoped.post('/assets/:logical/remove', (req, res) => {
+  const pid = req.project.id;
+  const db = store.load(pid);
   const asset = db.assets.find((a) => a.logical === req.params.logical);
   if (!asset) return res.status(404).json({ ok: false, error: 'not found' });
   asset.status = 'removed';
   asset.updatedAt = new Date().toISOString();
-  store.save(db);
+  store.save(pid, db);
   res.json({ ok: true });
 });
 
 /** 恢复 */
-router.post('/assets/:logical/restore', (req, res) => {
-  const db = store.load();
+scoped.post('/assets/:logical/restore', (req, res) => {
+  const pid = req.project.id;
+  const db = store.load(pid);
   const asset = db.assets.find((a) => a.logical === req.params.logical);
   if (!asset) return res.status(404).json({ ok: false, error: 'not found' });
   asset.status = 'active';
   asset.updatedAt = new Date().toISOString();
-  store.save(db);
+  store.save(pid, db);
   res.json({ ok: true });
 });
 
 /** 发布：构建三端产物 */
-router.post('/publish', async (req, res) => {
+scoped.post('/publish', async (req, res) => {
   try {
+    const pid = req.project.id;
+    const l = lib(req);
     const { by = 'unknown', note = '' } = req.body || {};
-    const db = store.load();
-    const snapshot = buildSnapshot(db);
+    const db = store.load(pid);
+    const snapshot = buildSnapshot(db, l);
     if (!snapshot.length) return res.status(400).json({ ok: false, error: '没有可发布的资源' });
 
     const version = store.nextVersion(db);
@@ -208,8 +385,9 @@ router.post('/publish', async (req, res) => {
     const changelog = diffSnapshots(prev ? prev.assets : [], snapshot);
 
     const allVersions = db.releases.map((r) => r.version);
-    const android = await buildAndroid({ assets: snapshot, version, allVersions });
-    const ios = await buildIos({ assets: snapshot, version });
+    const outputDir = store.outputDir(pid);
+    const android = await buildAndroid({ lib: l, outputDir, assets: snapshot, version, allVersions });
+    const ios = await buildIos({ lib: l, outputDir, assets: snapshot, version });
 
     const release = {
       version,
@@ -221,7 +399,7 @@ router.post('/publish', async (req, res) => {
       artifacts: { android, ios },
     };
     db.releases.push(release);
-    store.save(db);
+    store.save(pid, db);
 
     res.json({ ok: true, release: publicRelease(release) });
   } catch (err) {
@@ -231,14 +409,14 @@ router.post('/publish', async (req, res) => {
 });
 
 /** 版本列表 */
-router.get('/releases', (req, res) => {
-  const db = store.load();
+scoped.get('/releases', (req, res) => {
+  const db = store.load(req.project.id);
   res.json({ releases: db.releases.map(publicRelease).reverse() });
 });
 
 /** 任意两个版本的 diff（默认：最新 vs 上一版） */
-router.get('/diff', (req, res) => {
-  const db = store.load();
+scoped.get('/diff', (req, res) => {
+  const db = store.load(req.project.id);
   const rels = db.releases;
   if (!rels.length) return res.json({ from: null, to: null, added: [], modified: [], removed: [] });
 
@@ -258,5 +436,7 @@ router.get('/diff', (req, res) => {
     ...changelog,
   });
 });
+
+router.use('/projects/:pid', scoped);
 
 module.exports = router;

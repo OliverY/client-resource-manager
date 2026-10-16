@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { renderScaled, pickSource } = require('../lib/image');
-const { LIB, DENSITIES, OUTPUT_DIR } = require('../config');
+const { DENSITIES } = require('../config');
 
 /**
  * 构建 iOS 资源依赖库（Swift Package Manager 文本包）。
@@ -13,9 +13,10 @@ const { LIB, DENSITIES, OUTPUT_DIR } = require('../config');
  * 使用方在 Xcode 里添加依赖即可，Xcode 集成时自动把 Assets.xcassets 编译进 bundle。
  * 因此这条链路完全跑在 Linux/Node 上，规避了 macOS 构建机。
  */
-async function buildIos({ assets, version }) {
-  const pkgDir = path.join(OUTPUT_DIR, 'ios', LIB.iosPackage);
-  const targetDir = path.join(pkgDir, 'Sources', LIB.iosPackage);
+/** lib：项目打包坐标；outputDir：项目产物根目录 */
+async function buildIos({ lib, outputDir, assets, version }) {
+  const pkgDir = path.join(outputDir, 'ios', lib.iosPackage);
+  const targetDir = path.join(pkgDir, 'Sources', lib.iosPackage);
   const resourcesDir = path.join(targetDir, 'Resources');
   const xcassets = path.join(resourcesDir, 'Assets.xcassets');
 
@@ -49,14 +50,14 @@ async function buildIos({ assets, version }) {
 import PackageDescription
 
 let package = Package(
-    name: "${LIB.iosPackage}",
+    name: "${lib.iosPackage}",
     platforms: [.iOS(.v13)],
     products: [
-        .library(name: "${LIB.iosPackage}", targets: ["${LIB.iosPackage}"])
+        .library(name: "${lib.iosPackage}", targets: ["${lib.iosPackage}"])
     ],
     targets: [
         .target(
-            name: "${LIB.iosPackage}",
+            name: "${lib.iosPackage}",
             resources: [.process("Resources")]
         )
     ]
@@ -65,19 +66,19 @@ let package = Package(
   fs.writeFileSync(path.join(pkgDir, 'Package.swift'), manifest, 'utf8');
 
   // 生成的访问器（对标 Android 的 R.xxx）
-  fs.writeFileSync(path.join(targetDir, `${LIB.iosPackage}.swift`), swiftAccessors(assets), 'utf8');
+  fs.writeFileSync(path.join(targetDir, `${lib.iosPackage}.swift`), swiftAccessors(assets, lib.iosPackage), 'utf8');
 
   return {
     platform: 'ios',
-    packageName: LIB.iosPackage,
+    packageName: lib.iosPackage,
     dir: pkgDir,
     resourceCount: assets.length,
-    usage: `.package(url: "https://git.company.com/design/${LIB.iosPackage.toLowerCase()}.git", from: "${version}")`,
+    usage: `.package(url: "https://git.company.com/design/${lib.iosPackage.toLowerCase()}.git", from: "${version}")`,
     localUsage: `.package(path: "${path.relative(process.cwd(), pkgDir)}")`,
   };
 }
 
-function swiftAccessors(assets) {
+function swiftAccessors(assets, packageName) {
   const lines = assets.map((a) => `    /// ${a.logical}
     public static var ${a.iosName}: UIImage? {
         UIImage(named: "${a.iosName}", in: bundle, compatibleWith: nil)
@@ -87,7 +88,7 @@ function swiftAccessors(assets) {
 #if canImport(UIKit)
 import UIKit
 
-public enum ${LIB.iosPackage} {
+public enum ${packageName} {
     private static let bundle = Bundle.module
 
 ${lines}

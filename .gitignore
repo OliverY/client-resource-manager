@@ -2,3 +2,5 @@ node_modules/
 data/
 *.log
 .DS_Store
+data.backup-before-migration/
+data.backup-before-wipe-20261016/

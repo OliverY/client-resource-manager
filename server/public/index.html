@@ -13,11 +13,24 @@
       <span>图片资源管理器</span>
       <span class="badge">MVP</span>
     </div>
-    <div class="role-switch" id="roleSwitch">
-      <button data-role="designer">设计师</button>
-      <button data-role="developer">开发</button>
+    <div class="topbar-right">
+      <div class="project-switch">
+        <select id="projectSelect" title="切换项目"></select>
+        <button class="designer-only" id="newProjectBtn" title="新建项目">＋ 新建项目</button>
+        <button class="designer-only" id="editProjectBtn" title="编辑当前项目的名称 / 前缀 / 打包坐标" hidden>编辑</button>
+      </div>
+      <div class="role-switch" id="roleSwitch">
+        <button data-role="designer">设计师</button>
+        <button data-role="developer">开发</button>
+      </div>
     </div>
   </header>
+
+  <div class="empty" id="noProject" hidden>
+    <p>还没有项目。项目用于隔离不同 App 的资源、版本与打包产物。</p>
+    <button class="primary designer-only" id="createFirstProjectBtn">＋ 新建第一个项目</button>
+    <p class="muted" id="noProjectHint" hidden>当前为「开发」角色，无法创建项目，请切换为设计师。</p>
+  </div>
 
   <nav class="tabs" id="tabs">
     <button data-tab="assets">资源列表</button>
@@ -41,6 +54,19 @@
           </div>
         </div>
         <div class="upload-result" id="uploadResult"></div>
+      </div>
+
+      <div class="pending-banner" id="pendingBanner" hidden>
+        <span class="pb-dot">!</span>
+        <span class="pb-text" id="pendingText"></span>
+        <button class="primary designer-only" id="pendingPublishBtn">保存并发布新版本</button>
+      </div>
+
+      <div class="card designer-only publish-card">
+        <div class="card-head">
+          <h2>发布</h2>
+          <span class="hint">上传 / 删除只是修改资源库，点「发布新版本」批量提交为正式版本</span>
+        </div>
         <div class="publish-bar">
           <input type="text" id="publishNote" placeholder="本次发布说明（可选）" />
           <button class="primary" id="publishBtn">发布新版本</button>
@@ -48,21 +74,32 @@
         <div class="publish-result" id="publishResult"></div>
       </div>
 
-      <div class="toolbar">
-        <div class="toolbar-left">
-          <input type="search" id="searchInput" placeholder="搜索资源名…" />
-        </div>
-        <div class="toolbar-right">
-          <span class="muted">排序</span>
-          <div class="seg" id="sortSwitch">
-            <button data-sort="time">时间倒序</button>
-            <button data-sort="name">按名称</button>
+      <div class="assets-layout">
+        <div class="assets-main">
+          <div class="toolbar">
+            <div class="toolbar-left">
+              <input type="search" id="searchInput" placeholder="搜索资源名…" />
+            </div>
+            <div class="toolbar-right">
+              <span class="muted">排序</span>
+              <div class="seg" id="sortSwitch">
+                <button data-sort="time">时间倒序</button>
+                <button data-sort="name">按名称</button>
+                <button data-sort="version">按版本</button>
+                <button data-sort="date">按日期</button>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <div class="asset-grid" id="assetGrid"></div>
-      <div class="empty" id="assetEmpty" hidden>还没有资源，先上传一批图片吧。</div>
+          <div class="asset-grid" id="assetGrid"></div>
+          <div class="empty" id="assetEmpty" hidden>还没有资源，先上传一批图片吧。</div>
+        </div>
+
+        <aside class="asset-detail" id="assetDetail">
+          <div class="detail-empty" id="detailEmpty">点击左侧资源<br>查看详情</div>
+          <div class="detail-body" id="detailBody" hidden></div>
+        </aside>
+      </div>
     </section>
 
     <section id="tab-releases" class="tab-panel" hidden>
@@ -84,6 +121,51 @@
       </div>
     </section>
   </main>
+
+  <dialog id="projectDialog">
+    <form id="projectForm" novalidate>
+      <h2 id="projectDialogTitle">新建项目</h2>
+      <div class="form-grid">
+        <label>项目 ID
+          <input name="id" placeholder="小写字母开头，如 demo" autocomplete="off" spellcheck="false" />
+        </label>
+        <label>项目名称
+          <input name="name" placeholder="显示名称，默认同 ID" autocomplete="off" />
+        </label>
+        <label>资源前缀
+          <input name="prefix" placeholder="如 demo_，生成资源名时使用" autocomplete="off" spellcheck="false" />
+        </label>
+        <details class="adv">
+          <summary>打包坐标（高级，默认自动生成）</summary>
+          <label>groupId（Android Maven）<input name="groupId" autocomplete="off" spellcheck="false" /></label>
+          <label>artifactId（Android Maven）<input name="artifactId" autocomplete="off" spellcheck="false" /></label>
+          <label>iOS SPM 包名<input name="iosPackage" autocomplete="off" spellcheck="false" /></label>
+        </details>
+        <div class="warn" id="projectFormError" hidden></div>
+        <div class="dialog-actions">
+          <button type="button" id="projectCancel">取消</button>
+          <button type="submit" class="primary" id="projectSave">保存</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="lightbox">
+    <div class="lightbox-head">
+      <div class="lightbox-title">
+        <div id="lightboxTitle"></div>
+        <div class="muted" id="lightboxMeta"></div>
+      </div>
+      <button id="lightboxClose">关闭</button>
+    </div>
+    <div class="lightbox-stage">
+      <div class="preview-stage big">
+        <img id="lightboxImg" alt="" />
+        <div class="tint-layer" id="lightboxTint"></div>
+      </div>
+    </div>
+    <div class="lightbox-foot muted">大图与着色仅用于展示（着色仅对矢量图生效），不影响源图与打包产物</div>
+  </dialog>
 
   <div class="toast" id="toast" hidden></div>
 

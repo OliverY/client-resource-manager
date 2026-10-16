@@ -5,7 +5,7 @@ const path = require('path');
 const AdmZip = require('adm-zip');
 
 const { renderScaled, pickSource } = require('../lib/image');
-const { LIB, DENSITIES, OUTPUT_DIR } = require('../config');
+const { DENSITIES } = require('../config');
 
 function xmlEscape(s) {
   return String(s).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
@@ -19,8 +19,9 @@ function xmlEscape(s) {
  * 注意：本实现为「免 Android SDK」的纯 Node 打包路径，适合资源型库（无代码）。
  * 若库内需要 Kotlin/Java 代码，请改用 generateGradleModule() 走 Gradle 构建。
  */
-async function buildAndroid({ assets, version, allVersions = [] }) {
-  const root = path.join(OUTPUT_DIR, 'android');
+/** lib：项目打包坐标（prefix/groupId/artifactId/iosPackage/androidPackage）；outputDir：项目产物根目录 */
+async function buildAndroid({ lib, outputDir, assets, version, allVersions = [] }) {
+  const root = path.join(outputDir, 'android');
   const moduleDir = path.join(root, 'module');
   fs.rmSync(moduleDir, { recursive: true, force: true });
   fs.mkdirSync(moduleDir, { recursive: true });
@@ -43,7 +44,7 @@ async function buildAndroid({ assets, version, allVersions = [] }) {
   // AndroidManifest.xml
   const manifest = `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="${LIB.androidPackage}">
+    package="${lib.androidPackage}">
 </manifest>
 `;
   fs.writeFileSync(path.join(moduleDir, 'AndroidManifest.xml'), manifest, 'utf8');
@@ -52,7 +53,7 @@ async function buildAndroid({ assets, version, allVersions = [] }) {
   fs.writeFileSync(path.join(moduleDir, 'R.txt'), rLines.join('\n') + '\n', 'utf8');
 
   // 打成 AAR
-  const aarName = `${LIB.artifactId}-${version}.aar`;
+  const aarName = `${lib.artifactId}-${version}.aar`;
   const aarPath = path.join(root, aarName);
   fs.rmSync(aarPath, { force: true });
 
@@ -63,26 +64,26 @@ async function buildAndroid({ assets, version, allVersions = [] }) {
   zip.writeZip(aarPath);
 
   // 发布到本地 Maven 仓库
-  const maven = await publishToLocalMaven({ aarPath, version, allVersions });
+  const maven = await publishToLocalMaven({ lib, outputDir, aarPath, version, allVersions });
 
   return {
     platform: 'android',
-    artifact: `${LIB.groupId}:${LIB.artifactId}:${version}`,
+    artifact: `${lib.groupId}:${lib.artifactId}:${version}`,
     aar: aarPath,
     aarSize: fs.statSync(aarPath).size,
     resourceCount: assets.length,
     maven,
-    usage: `implementation("${LIB.groupId}:${LIB.artifactId}:${version}")`,
+    usage: `implementation("${lib.groupId}:${lib.artifactId}:${version}")`,
   };
 }
 
-async function publishToLocalMaven({ aarPath, version, allVersions }) {
-  const groupPath = LIB.groupId.replace(/\./g, '/');
-  const base = path.join(OUTPUT_DIR, 'maven', groupPath, LIB.artifactId);
+async function publishToLocalMaven({ lib, outputDir, aarPath, version, allVersions }) {
+  const groupPath = lib.groupId.replace(/\./g, '/');
+  const base = path.join(outputDir, 'maven', groupPath, lib.artifactId);
   const versionDir = path.join(base, version);
   fs.mkdirSync(versionDir, { recursive: true });
 
-  const aarName = `${LIB.artifactId}-${version}.aar`;
+  const aarName = `${lib.artifactId}-${version}.aar`;
   fs.copyFileSync(aarPath, path.join(versionDir, aarName));
 
   const pom = `<?xml version="1.0" encoding="UTF-8"?>
@@ -90,21 +91,21 @@ async function publishToLocalMaven({ aarPath, version, allVersions }) {
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
-  <groupId>${LIB.groupId}</groupId>
-  <artifactId>${LIB.artifactId}</artifactId>
+  <groupId>${lib.groupId}</groupId>
+  <artifactId>${lib.artifactId}</artifactId>
   <version>${version}</version>
   <packaging>aar</packaging>
-  <name>${LIB.artifactId}</name>
+  <name>${lib.artifactId}</name>
   <description>Design assets library (auto-generated)</description>
 </project>
 `;
-  fs.writeFileSync(path.join(versionDir, `${LIB.artifactId}-${version}.pom`), pom, 'utf8');
+  fs.writeFileSync(path.join(versionDir, `${lib.artifactId}-${version}.pom`), pom, 'utf8');
 
   const versions = Array.from(new Set([...(allVersions || []), version]));
   const metadata = `<?xml version="1.0" encoding="UTF-8"?>
 <metadata>
-  <groupId>${LIB.groupId}</groupId>
-  <artifactId>${LIB.artifactId}</artifactId>
+  <groupId>${lib.groupId}</groupId>
+  <artifactId>${lib.artifactId}</artifactId>
   <versioning>
     <latest>${version}</latest>
     <release>${version}</release>
@@ -118,9 +119,9 @@ ${versions.map((v) => `      <version>${v}</version>`).join('\n')}
   fs.writeFileSync(path.join(base, 'maven-metadata.xml'), metadata, 'utf8');
 
   return {
-    repoDir: path.join(OUTPUT_DIR, 'maven'),
-    coordinate: `${LIB.groupId}:${LIB.artifactId}:${version}`,
-    path: `${groupPath}/${LIB.artifactId}/${version}/${aarName}`,
+    repoDir: path.join(outputDir, 'maven'),
+    coordinate: `${lib.groupId}:${lib.artifactId}:${version}`,
+    path: `${groupPath}/${lib.artifactId}/${version}/${aarName}`,
   };
 }
 
@@ -128,8 +129,8 @@ ${versions.map((v) => `      <version>${v}</version>`).join('\n')}
  * 可选路径：生成一个标准 Gradle Library 模块（供需要代码/AGP 校验时使用）。
  * 生成后可在有 Android SDK 的环境执行 `./gradlew assembleRelease`。
  */
-async function generateGradleModule({ assets, version }) {
-  const dir = path.join(OUTPUT_DIR, 'android', 'gradle-module');
+async function generateGradleModule({ lib, outputDir, assets, version }) {
+  const dir = path.join(outputDir, 'android', 'gradle-module');
   fs.rmSync(dir, { recursive: true, force: true });
 
   const resDir = path.join(dir, 'src', 'main', 'res');
@@ -148,10 +149,10 @@ async function generateGradleModule({ assets, version }) {
 }
 
 android {
-    namespace = "${LIB.androidPackage}"
+    namespace = "${lib.androidPackage}"
     compileSdk = 34
     defaultConfig { minSdk = 21 }
-    resourcePrefix = "${LIB.prefix}"
+    resourcePrefix = "${lib.prefix}"
 }
 
 afterEvaluate {
@@ -159,8 +160,8 @@ afterEvaluate {
         publications {
             create<MavenPublication>("release") {
                 from(components["release"])
-                groupId = "${LIB.groupId}"
-                artifactId = "${LIB.artifactId}"
+                groupId = "${lib.groupId}"
+                artifactId = "${lib.artifactId}"
                 version = "${version}"
             }
         }
