@@ -139,7 +139,7 @@ function renderDiffPickers() {
   const from = $('#diffFrom');
   const to = $('#diffTo');
   if (from.dataset.filled === opts) return;
-  from.innerHTML = `<option value="">（初始）</option>` + opts;
+  from.innerHTML = `<option value="">（上一版）</option>` + opts;
   to.innerHTML = opts;
   from.dataset.filled = opts;
   if (rels[0]) to.value = rels[0].version;

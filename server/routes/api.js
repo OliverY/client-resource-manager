@@ -44,7 +44,8 @@ router.get('/state', (req, res) => {
       iosPackage: LIB.iosPackage,
     },
     assets: db.assets.map(publicAsset),
-    releases: db.releases.map(publicRelease),
+    // releases 倒序（最新在前）：与 /api/releases 一致，前端「更新对比」默认选中最新一版依赖此顺序
+    releases: db.releases.map(publicRelease).reverse(),
   });
 });
 
@@ -243,6 +244,9 @@ router.get('/diff', (req, res) => {
 
   const toIdx = req.query.to ? rels.findIndex((r) => r.version === req.query.to) : rels.length - 1;
   const fromIdx = req.query.from ? rels.findIndex((r) => r.version === req.query.from) : toIdx - 1;
+
+  if (req.query.to && toIdx === -1) return res.status(404).json({ ok: false, error: `发布版本不存在: ${req.query.to}` });
+  if (req.query.from && fromIdx === -1) return res.status(404).json({ ok: false, error: `发布版本不存在: ${req.query.from}` });
 
   const to = rels[toIdx];
   const from = fromIdx >= 0 ? rels[fromIdx] : null;
