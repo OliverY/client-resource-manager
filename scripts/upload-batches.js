@@ -6,7 +6,8 @@
  * 用法：node scripts/upload-batches.js [项目id] [批数] [原图目录]
  * 默认：node scripts/upload-batches.js demo 10 data/import/demo-asset
  *
- * 原图命名约定：<logical>@2x.png / <logical>@3x.png，同一逻辑名两个倍率必须齐全。
+ * 位图命名约定：<logical>@2x.png / <logical>@3x.png，同一逻辑名两个倍率必须齐全。
+ * 矢量命名约定：<logical>.svg，单源无倍率。目录里出现 .svg 即按矢量模式处理。
  */
 
 const fs = require('fs');
@@ -22,22 +23,30 @@ if (!fs.existsSync(SRC)) {
   process.exit(1);
 }
 
-/* 1. 按逻辑名归组 @2x / @3x 源图 */
+/* 1. 按逻辑名归组源图：svg 单文件为一组；png 按 @2x / @3x 配对 */
 const byLogical = new Map();
+let svgMode = false;
 for (const name of fs.readdirSync(SRC)) {
-  const m = name.match(/^(.+)@(\d)x\.png$/i);
-  if (!m) continue;
-  if (!byLogical.has(m[1])) byLogical.set(m[1], {});
-  byLogical.get(m[1])[m[2]] = name;
-}
-const logicals = [...byLogical.keys()].sort();
-for (const l of logicals) {
-  const s = byLogical.get(l);
-  if (!s['2'] || !s['3']) {
-    console.error(`${l} 缺少 @2x 或 @3x 源图，终止`);
-    process.exit(1);
+  if (/\.svg$/i.test(name)) {
+    svgMode = true;
+    byLogical.set(name.replace(/\.svg$/i, ''), { svg: name });
   }
 }
+if (!svgMode) {
+  for (const name of fs.readdirSync(SRC)) {
+    const m = name.match(/^(.+)@(\d)x\.png$/i);
+    if (!m) continue;
+    if (!byLogical.has(m[1])) byLogical.set(m[1], {});
+    byLogical.get(m[1])[m[2]] = name;
+  }
+  for (const [l, s] of byLogical) {
+    if (!s['2'] || !s['3']) {
+      console.error(`${l} 缺少 @2x 或 @3x 源图，终止`);
+      process.exit(1);
+    }
+  }
+}
+const logicals = [...byLogical.keys()].sort();
 
 /* 2. 均衡分批：余数摊给前面的批次 */
 const base = Math.floor(logicals.length / BATCHES);
@@ -53,9 +62,14 @@ for (let i = 0; i < BATCHES; i++) {
 async function uploadBatch(chunk) {
   const fd = new FormData();
   for (const logical of chunk) {
-    for (const scale of ['2', '3']) {
-      const name = byLogical.get(logical)[scale];
-      fd.append('files', new Blob([fs.readFileSync(path.join(SRC, name))], { type: 'image/png' }), name);
+    const s = byLogical.get(logical);
+    if (s.svg) {
+      fd.append('files', new Blob([fs.readFileSync(path.join(SRC, s.svg))], { type: 'image/svg+xml' }), s.svg);
+    } else {
+      for (const scale of ['2', '3']) {
+        const name = s[scale];
+        fd.append('files', new Blob([fs.readFileSync(path.join(SRC, name))], { type: 'image/png' }), name);
+      }
     }
   }
   const res = await fetch(`${BASE}/api/projects/${PID}/assets`, { method: 'POST', body: fd });

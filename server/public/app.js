@@ -173,6 +173,9 @@ function assetGroups() {
 }
 
 function previewUrl(a) {
+  if (a.format === 'svg') {
+    return `/uploads/${encodeURIComponent(state.projectId)}/${a.logical}/source.svg`;
+  }
   const scales = a.scales && a.scales.length ? a.scales : [3];
   const max = Math.max(...scales);
   return `/uploads/${encodeURIComponent(state.projectId)}/${a.logical}/source@${max}x.png`;
@@ -648,8 +651,9 @@ function bind() {
 
 async function uploadFiles(fileList) {
   if (!state.projectId) return toast('请先创建项目');
-  const files = Array.from(fileList || []).filter((f) => f.type === 'image/png' || /\.png$/i.test(f.name));
-  if (!files.length) return toast('请选择 PNG 文件');
+  const files = Array.from(fileList || [])
+    .filter((f) => f.type === 'image/png' || f.type === 'image/svg+xml' || /\.png$|\.svg$/i.test(f.name));
+  if (!files.length) return toast('请选择 PNG / SVG 文件');
 
   const fd = new FormData();
   files.forEach((f) => fd.append('files', f));

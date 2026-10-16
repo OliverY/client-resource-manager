@@ -25,7 +25,7 @@ function sha1(buf) {
   return crypto.createHash('sha1').update(buf).digest('hex');
 }
 
-/** 解析上传文件名：`home_icon_search@3x.png` / `home_icon_search.png`（默认 3x） */
+/** 解析上传文件名：`home_icon_search@3x.png` / `home_icon_search.png`（默认 3x）；.svg 无倍率概念 */
 function parseUploadName(originalname) {
   const base = path.basename(originalname);
   const m = base.match(/^(.*?)@(\d)x(\.[a-zA-Z0-9]+)?$/i);
@@ -266,8 +266,11 @@ scoped.post('/assets', upload.array('files'), async (req, res) => {
         warnings.push(`${file.originalname}: ${e.message}`);
         continue;
       }
-      const { logical, scale } = parsed;
-      if (![2, 3].includes(scale)) {
+      const { logical, scale: rawScale } = parsed;
+      const isSvg = path.extname(file.originalname).toLowerCase() === '.svg';
+      // SVG 是矢量单源，与倍率无关，统一按 scale 1 归档
+      const scale = isSvg ? 1 : rawScale;
+      if (![1, 2, 3].includes(scale)) {
         warnings.push(`${file.originalname}: 只支持 @2x / @3x`);
         continue;
       }
@@ -275,7 +278,8 @@ scoped.post('/assets', upload.array('files'), async (req, res) => {
       if (issues.length) warnings.push(`${logical}: ${issues.join('；')}`);
 
       const buf = file.buffer;
-      const tmp = path.join(uploadRoot, `.tmp-${Date.now()}-${logical}@${scale}x.png`);
+      const ext = isSvg ? '.svg' : '.png';
+      const tmp = path.join(uploadRoot, `.tmp-${Date.now()}-${logical}@${scale}x${ext}`);
       fs.mkdirSync(uploadRoot, { recursive: true });
       fs.writeFileSync(tmp, buf);
       const meta = await probe(tmp);
@@ -283,7 +287,7 @@ scoped.post('/assets', upload.array('files'), async (req, res) => {
 
       const destDir = path.join(uploadRoot, logical);
       fs.mkdirSync(destDir, { recursive: true });
-      const dest = path.join(destDir, `source@${scale}x.png`);
+      const dest = path.join(destDir, isSvg ? 'source.svg' : `source@${scale}x.png`);
       fs.writeFileSync(dest, buf);
 
       if (!byLogical.has(logical)) byLogical.set(logical, {});
@@ -308,7 +312,7 @@ scoped.post('/assets', upload.array('files'), async (req, res) => {
         asset = {
           id: store.nextAssetId(db),
           logical,
-          format: 'png',
+          format: path.extname(Object.values(sources)[0].path).toLowerCase() === '.svg' ? 'svg' : 'png',
           tags: [],
           status: 'active',
           createdAt: now,
@@ -332,7 +336,7 @@ scoped.post('/assets', upload.array('files'), async (req, res) => {
       asset.width = highest.width;
       asset.height = highest.height;
       asset.sourceScale = highest.scale;
-      asset.format = 'png';
+      asset.format = path.extname(highest.path).toLowerCase() === '.svg' ? 'svg' : 'png';
       asset.vectorLike = await isVectorLike(highest.path);
       asset.updatedAt = now;
       if (asset.status === 'removed') asset.status = 'active';

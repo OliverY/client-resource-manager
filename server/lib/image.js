@@ -21,7 +21,9 @@ async function probe(filePath) {
 async function renderScaled(srcPath, srcScale, targetScale, outPath) {
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
 
-  if (Number(srcScale) === Number(targetScale)) {
+  // SVG 源与倍率无关，任何目标倍率都要重新栅格化，不能原样拷贝
+  const isSvg = srcPath.toLowerCase().endsWith('.svg');
+  if (!isSvg && Number(srcScale) === Number(targetScale)) {
     await fs.promises.copyFile(srcPath, outPath);
     return;
   }

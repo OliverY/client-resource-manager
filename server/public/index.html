@@ -43,13 +43,13 @@
       <div class="card designer-only">
         <div class="card-head">
           <h2>上传图片</h2>
-          <span class="hint">支持批量。文件名约定：<code>名称@3x.png</code> / <code>名称@2x.png</code>，不带后缀默认按 @3x</span>
+          <span class="hint">支持批量。位图：<code>名称@3x.png</code> / <code>名称@2x.png</code>，不带后缀默认按 @3x；矢量：<code>名称.svg</code>（单源，全密度自动派生）</span>
         </div>
         <div class="dropzone" id="dropzone">
-          <input type="file" id="fileInput" multiple accept="image/png" hidden />
+          <input type="file" id="fileInput" multiple accept="image/png,image/svg+xml" hidden />
           <div class="dz-inner">
             <div class="dz-icon"></div>
-            <p>拖拽 PNG 到这里，或 <span class="link">点击选择文件</span></p>
+            <p>拖拽 PNG / SVG 到这里，或 <span class="link">点击选择文件</span></p>
             <p class="dz-sub">Android 生成 xhdpi / xxhdpi，iOS 生成 @2x / @3x</p>
           </div>
         </div>
