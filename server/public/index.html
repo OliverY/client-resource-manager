@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>图片资源管理器</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo"></span>
+      <span>图片资源管理器</span>
+      <span class="badge">MVP</span>
+    </div>
+    <div class="role-switch" id="roleSwitch">
+      <button data-role="designer">设计师</button>
+      <button data-role="developer">开发</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button data-tab="assets">资源列表</button>
+    <button data-tab="releases">版本记录</button>
+    <button data-tab="diff">更新对比</button>
+  </nav>
+
+  <main>
+    <section id="tab-assets" class="tab-panel">
+      <div class="card designer-only">
+        <div class="card-head">
+          <h2>上传图片</h2>
+          <span class="hint">支持批量。文件名约定：<code>名称@3x.png</code> / <code>名称@2x.png</code>，不带后缀默认按 @3x</span>
+        </div>
+        <div class="dropzone" id="dropzone">
+          <input type="file" id="fileInput" multiple accept="image/png" hidden />
+          <div class="dz-inner">
+            <div class="dz-icon"></div>
+            <p>拖拽 PNG 到这里，或 <span class="link">点击选择文件</span></p>
+            <p class="dz-sub">Android 生成 xhdpi / xxhdpi，iOS 生成 @2x / @3x</p>
+          </div>
+        </div>
+        <div class="upload-result" id="uploadResult"></div>
+        <div class="publish-bar">
+          <input type="text" id="publishNote" placeholder="本次发布说明（可选）" />
+          <button class="primary" id="publishBtn">发布新版本</button>
+        </div>
+        <div class="publish-result" id="publishResult"></div>
+      </div>
+
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <input type="search" id="searchInput" placeholder="搜索资源名…" />
+        </div>
+        <div class="toolbar-right">
+          <span class="muted">排序</span>
+          <div class="seg" id="sortSwitch">
+            <button data-sort="time">时间倒序</button>
+            <button data-sort="name">按名称</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="asset-grid" id="assetGrid"></div>
+      <div class="empty" id="assetEmpty" hidden>还没有资源，先上传一批图片吧。</div>
+    </section>
+
+    <section id="tab-releases" class="tab-panel" hidden>
+      <div class="release-list" id="releaseList"></div>
+      <div class="empty" id="releaseEmpty" hidden>还没有发布记录。</div>
+    </section>
+
+    <section id="tab-diff" class="tab-panel" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2>版本对比</h2>
+          <div class="diff-picker">
+            <select id="diffFrom"></select>
+            <span class="muted">→</span>
+            <select id="diffTo"></select>
+          </div>
+        </div>
+        <div id="diffBody" class="diff-body"></div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
