@@ -4,3 +4,4 @@ data/
 .DS_Store
 data.backup-before-migration/
 data.backup-before-wipe-20261016/
+.zcode/
