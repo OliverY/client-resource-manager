@@ -44,10 +44,16 @@ flowchart LR
   <img src="docs/images/01-library.png" alt="资源库与发布" width="800">
 </p>
 
-点任意卡片，右侧面板直接给出 Android / iOS 物理名、原始尺寸和倍率——开发不用再问设计要图：
+资源多了以后靠翻卡片找不到东西。顶部搜索框按名称即时过滤，右侧可切「时间倒序 / 按名称 / 按版本 / 按日期」四种排法，按版本排时还会自动分组，一眼看出「哪些是这一版新加的」：
 
 <p align="center">
-  <img src="docs/images/02-detail.png" alt="资源详情面板" width="800">
+  <img src="docs/images/05-search.png" alt="资源搜索与排序" width="800">
+</p>
+
+点任意卡片，右侧面板直接给出 Android / iOS 物理名、原始尺寸和倍率——开发不用再问设计要图。而且不只是「看」：物理名可一键复制，原图、Android PNG（或 VectorDrawable XML）、iOS imageset 按需下载；单色图标还能开着色预览试配色。删除是软删除——标记后发布新版本才生效，老版本 App 不受影响，随时可恢复：
+
+<p align="center">
+  <img src="docs/images/06-detail.png" alt="资源详情与修改" width="800">
 </p>
 
 发布的每个版本都有完整记录——版本号、变更资源、依赖坐标一目了然：
@@ -62,6 +68,17 @@ flowchart LR
   <img src="docs/images/04-diff.png" alt="版本对比" width="800">
 </p>
 
+## 功能一览
+
+| 环节 | 能做什么 | 谁用 |
+|---|---|---|
+| 上传 | 批量拖拽，支持 `@2x/@3x` 与 SVG；重名自动合并为同一资源的多倍率源 | 设计师 |
+| 查找 | 名称搜索 + 时间/名称/版本/日期四种排序，按版本自动分组 | 双方 |
+| 查看 | 两端物理名、原始尺寸、已有倍率、更新时间，物理名可复制 | 双方 |
+| 修改 | 着色预览、单资源下载、软删除 / 恢复；项目级前缀与打包坐标可改 | 设计师 |
+| 发布 | 一键生成 Android AAR（含本地 Maven）与 iOS SPM 资源包 | 设计师 |
+| 追溯 | 版本记录 + 任意两版 diff（新增 / 修改 / 删除） | 双方 |
+
 ## 跑起来（两条命令）
 
 ```bash
@@ -71,12 +88,20 @@ npm start          # 打开 http://localhost:5173
 
 `samples/` 里已放了一批示例图标（脚本绘制的纯矢量图，无第三方素材）；想重新生成就执行 `node scripts/gen-samples.js`。
 
+前端是 **React 18 + antd 5**（源码在 `web/`），构建产物已提交到 `server/public/`，所以 `npm start` 不需要额外构建。改前端时：
+
+```bash
+npm run dev        # 后端，http://localhost:5173
+npm run dev:web    # Vite 开发服务器，http://localhost:5174（/api、/uploads、/artifacts 代理到 5173）
+npm run build      # 重新构建到 server/public
+```
+
 打开页面后，右上角切换角色，两条主线各走一遍：
 
 | 角色 | 你能干什么 |
 |---|---|
-| 🎨 **设计师** | 拖图上传 → 点「发布新版本」，完事 |
-| 💻 **开发** | 看版本记录、对比任意两版差异、复制依赖坐标 |
+| 🎨 **设计师** | 拖图上传 → 搜索/查看/着色预览/删除 → 点「发布新版本」 |
+| 💻 **开发** | 搜资源、看两端物理名与倍率、比任意两版差异、复制依赖坐标 |
 
 ---
 

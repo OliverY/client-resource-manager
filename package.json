@@ -6,7 +6,9 @@
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
-    "dev": "node --watch server/index.js"
+    "dev": "node --watch server/index.js",
+    "dev:web": "vite",
+    "build": "vite build"
   },
   "engines": {
     "node": ">=18"
@@ -16,5 +18,13 @@
     "express": "^4.21.2",
     "multer": "^2.0.1",
     "sharp": "^0.33.5"
+  },
+  "devDependencies": {
+    "@ant-design/icons": "^5.6.1",
+    "@vitejs/plugin-react": "^5.0.4",
+    "antd": "^5.29.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^7.1.12"
   }
 }

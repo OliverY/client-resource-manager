@@ -51,13 +51,27 @@ sequenceDiagram
     C->>C: 依赖版本号 +0.0.1，编译即得新资源
 ```
 
-界面上，资源列表只展示图标与名称，点卡片在右侧面板看详情（Android / iOS 物理名、尺寸、倍率）：
+资源多了以后靠翻卡片找不到东西：顶部搜索框按名称即时过滤，右侧可切「时间倒序 / 按名称 / 按版本 / 按日期」四种排序，按版本排时自动分组：
 
 <p align="center">
-  <img src="images/02-detail.png" alt="资源详情面板" width="800">
+  <img src="images/05-search.png" alt="资源搜索与排序" width="800">
 </p>
 
-详情面板支持**着色预览**（仅对矢量图/单色图标生效，纯展示用，不影响源图与产物）。「开发」角色可查看版本记录、任意两版 diff（新增 / 修改 / 删除）：
+界面上，资源列表只展示图标与名称，点卡片在右侧面板看详情（Android / iOS 物理名、尺寸、倍率、更新时间）：
+
+<p align="center">
+  <img src="images/06-detail.png" alt="资源详情与修改" width="800">
+</p>
+
+面板里的操作分三类：
+
+| 操作 | 说明 |
+|---|---|
+| 复制物理名 | Android / iOS 名字一键复制，直接贴进代码 |
+| 下载 | 原图、Android PNG（矢量图为 VectorDrawable XML）、iOS imageset 压缩包，文件名已带前缀 |
+| 修改 | 着色预览（仅矢量图/单色图标，纯展示，不影响源图与产物）、软删除 / 恢复（发布后生效，老版本 App 不受影响） |
+
+「开发」角色可查看版本记录、任意两版 diff（新增 / 修改 / 删除）：
 
 <p align="center">
   <img src="images/04-diff.png" alt="版本对比" width="800">
@@ -186,7 +200,18 @@ server/
     android.js          生成 AAR + 落地本地 Maven 仓库
     ios.js              生成 SPM 资源包（Package.swift + Assets.xcassets）
   routes/api.js         项目管理 + 上传 / 发布 / 版本 / diff 接口
-  public/               Web 面板（无构建步骤，纯静态）
+  public/               Web 面板构建产物（Vite 输出，Express 直接托管）
+web/
+  index.html            前端入口
+  src/
+    main.jsx            React + antd 挂载（ConfigProvider / 主题 / 中文语言包）
+    App.jsx             页面骨架与项目、角色、标签页状态
+    api.js              接口封装 + 预览地址、排序分组、下载等纯函数
+    theme.js            antd 主题 token（品牌色 / 圆角 / 字体）
+    styles.css          少量布局样式（资源网格、预览棋盘底、着色遮罩）
+    components/         TopBar / UploadCard / PublishCard / AssetGrid /
+                        AssetDetail / Lightbox / ReleasesPanel / DiffPanel / ProjectModal
+vite.config.js          Vite 配置（root=web，产物输出到 server/public）
 scripts/
   gen-samples.js        生成示例 PNG
   upload-batches.js     分批导入（支持 SVG 矢量模式）

@@ -11,7 +11,7 @@
 #   DEPLOY_HOST=<host>                     # 必填：目标机器的主机名或 IP
 #   DEPLOY_USER=<user>                     # 默认当前用户（macOS 默认禁 root SSH）
 #   DEPLOY_DIR=client-resource-manager DEPLOY_PORT=5173
-#   RESTART=auto|launchd|pm2  LAUNCHD_LABEL=com.example.design.resource-manager
+#   RESTART=auto|launchd|pm2  LAUNCHD_LABEL=com.company.design.resource-manager
 
 set -euo pipefail
 
@@ -20,7 +20,7 @@ USER_NAME="${DEPLOY_USER:-$(whoami)}"
 REMOTE_DIR="${DEPLOY_DIR:-client-resource-manager}"  # 相对远程 home；也可填绝对路径
 PORT="${DEPLOY_PORT:-5173}"
 APP_NAME="client-resource-manager"
-LAUNCHD_LABEL="${LAUNCHD_LABEL:-com.example.design.resource-manager}"
+LAUNCHD_LABEL="${LAUNCHD_LABEL:-com.company.design.resource-manager}"
 RESTART="${RESTART:-auto}"
 SETUP=0
 [[ "${1:-}" == "--setup" ]] && SETUP=1
