@@ -185,15 +185,10 @@ code {
   border-color: var(--primary); background: var(--primary-weak);
   transform: translateY(-1px);
 }
+/* 上传图标：整块用 SVG 绘制，几何自对齐，不依赖 margin / rotate 微调 */
 .dz-icon {
-  width: 40px; height: 40px; margin: 0 auto 12px;
-  border-radius: 11px; background: var(--primary-weak); border: 1.5px solid var(--primary);
-  position: relative;
-}
-.dz-icon::after {
-  content: ''; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
-  width: 13px; height: 13px; border-left: 2px solid var(--primary); border-top: 2px solid var(--primary);
-  rotate: 45deg; margin-top: 4px;
+  display: block; width: 40px; height: 40px; margin: 0 auto 12px;
+  color: var(--primary);
 }
 .dropzone p { margin: 4px 0; }
 .dz-sub { font-size: 12px; color: var(--muted); }
@@ -381,6 +376,29 @@ code[data-copy]:hover { color: var(--primary); }
 }
 .detail-actions button:hover { border-color: var(--primary); color: var(--primary); box-shadow: var(--shadow-sm); }
 .detail-actions button.danger:hover { border-color: var(--red); color: var(--red); }
+
+/* 下载区：竖排三行，右侧标出该行下的是什么文件 */
+.dl-box {
+  margin-top: 12px; padding: 10px 12px 11px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--bg);
+}
+.dl-head {
+  display: flex; align-items: baseline; gap: 6px; justify-content: space-between;
+  font-size: 12px; font-weight: 600; margin-bottom: 8px;
+}
+.dl-head .muted { font-weight: 400; font-size: 11px; }
+.dl-rows { display: flex; flex-direction: column; gap: 6px; }
+.dl-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; font-family: inherit; font-size: 12px; padding: 8px 10px;
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
+  border-radius: 8px; cursor: pointer; text-align: left; transition: .15s;
+}
+.dl-row em { font-style: normal; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.dl-row:hover { border-color: var(--primary); color: var(--primary); box-shadow: var(--shadow-sm); }
+.dl-row:hover em { color: var(--primary); }
+.dl-row:disabled { opacity: .55; cursor: default; box-shadow: none; }
+
 .detail-tip { margin-top: 12px; font-size: 11px; line-height: 1.7; }
 
 /* ---------- 大图弹窗 ---------- */

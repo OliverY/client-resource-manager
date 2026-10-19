@@ -4,11 +4,9 @@ const path = require('path');
 const express = require('express');
 
 const config = require('./config');
-const { migrateIfNeeded } = require('./lib/migrate');
 const store = require('./lib/store');
 const api = require('./routes/api');
 
-migrateIfNeeded();
 store.ensureDirs();
 
 const app = express();

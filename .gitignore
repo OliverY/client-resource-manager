@@ -1,7 +1,18 @@
 node_modules/
+# 运行数据：项目注册表、上传原图、打包产物，均不随仓库分发
 data/
 *.log
 .DS_Store
-data.backup-before-migration/
-data.backup-before-wipe-20261016/
+
+# 本地工具 / Agent 工作目录
 .zcode/
+.workbuddy/
+.workbuddy-ai/
+
+# 示例工程的构建产物
+demos/**/build/
+demos/**/.gradle/
+*.iml
+
+# 本地示例客户端工程（不随仓库分发）
+demos/

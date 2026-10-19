@@ -4,11 +4,11 @@
  * 分批上传并回填历史日期：把原图目录分成 N 批逐批「上传 + 发布」得到 N 个版本，
  * 再通过 SSH 把各版本发布时间改写成 DATES 里的历史日期，形成自然的迭代记录。
  *
- * 用法：BASE_URL=http://<host>:5173 node scripts/upload-history.js [项目id] [批数] [原图目录] [日期文件]
- * 默认：BASE_URL=http://host-ip:5173 node scripts/upload-history.js demo 10 data/import/demo-asset
+ * 用法：BASE_URL=http://<host>:5173 SSH_HOST=user@host node scripts/upload-history.js [项目id] [批数] [原图目录] [日期文件]
+ * 默认：BASE_URL=http://127.0.0.1:5173 SSH_HOST=user@host node scripts/upload-history.js demo 10 data/import/demo-asset
  *
  * 日期文件（可选，JSON）：{ "dates": ["2026-08-14T02:26:41.000Z", ...], "projectCreatedAt": "..." }，
- * 覆盖下方 demo 默认历史；允许多个版本同一天。
+ * 覆盖下方默认历史；允许多个版本同一天。
  *
  * 前置：目标项目发布记录应为空（版本号按发布次数 1.0.N 递增，非空则中止）。
  * 原图命名约定：<logical>@2x.png / <logical>@3x.png，同一逻辑名两个倍率必须齐全。
@@ -18,8 +18,8 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-const BASE = process.env.BASE_URL || 'http://host-ip:5173';
-const SSH = process.env.SSH_HOST || 'user@host';
+const BASE = process.env.BASE_URL || 'http://127.0.0.1:5173';
+const SSH = process.env.SSH_HOST || '';
 const REMOTE_DATA = process.env.REMOTE_DATA || '~/client-resource-manager/data';
 const PID = process.argv[2] || 'demo';
 const BATCHES = Number(process.argv[3]) || 10;
@@ -51,6 +51,10 @@ if (DATES_FILE) {
 
 if (!fs.existsSync(SRC)) {
   console.error(`原图目录不存在: ${SRC}`);
+  process.exit(1);
+}
+if (!SSH) {
+  console.error('请用 SSH_HOST=user@host 指定可免密登录的服务器（回填历史需要直接改写远端 db.json）');
   process.exit(1);
 }
 if (DATES.length !== BATCHES) {
@@ -102,7 +106,7 @@ async function publish(note) {
   const res = await fetch(`${BASE}/api/projects/${PID}/publish`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ by: 'designer', note }),
+    body: JSON.stringify({ by: process.env.PUBLISHER || 'designer', note }),
   });
   return res.json();
 }

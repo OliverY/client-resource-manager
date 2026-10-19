@@ -48,7 +48,11 @@
         <div class="dropzone" id="dropzone">
           <input type="file" id="fileInput" multiple accept="image/png,image/svg+xml" hidden />
           <div class="dz-inner">
-            <div class="dz-icon"></div>
+            <svg class="dz-icon" viewBox="0 0 40 40" width="40" height="40" aria-hidden="true">
+              <rect x="1" y="1" width="38" height="38" rx="10" fill="currentColor" fill-opacity=".07" stroke="currentColor" stroke-width="1.6" />
+              <path d="M20 26.8V13.4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" />
+              <path d="M14.5 18.9 20 13.4l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
             <p>拖拽 PNG / SVG 到这里，或 <span class="link">点击选择文件</span></p>
             <p class="dz-sub">Android 生成 xhdpi / xxhdpi，iOS 生成 @2x / @3x</p>
           </div>

@@ -250,6 +250,7 @@ function renderDetail() {
   const removed = a.status === 'removed';
   const scales = (a.scales || []).map((s) => '@' + s + 'x').join(' / ') || '-';
   const tintable = !!a.vectorLike; // 着色预览只对矢量图（单色图标）开放
+  const isVector = a.format === 'svg';
 
   body.innerHTML = `
     <div class="detail-preview preview-stage" title="点击查看大图">
@@ -259,7 +260,7 @@ function renderDetail() {
     <div class="detail-name">
       <span class="asset-name">${escapeHtml(a.logical)}</span>
       ${removed ? '<span class="tag warn">已删除</span>' : ''}
-      <span class="tag">png</span>
+      <span class="tag">${escapeHtml(a.format || 'png')}</span>
     </div>
     <div class="info-rows">
       <div class="info-row"><span class="k">Android</span>
@@ -269,6 +270,20 @@ function renderDetail() {
       <div class="info-row"><span class="k">原始尺寸</span><span class="v">${a.width}×${a.height}</span></div>
       <div class="info-row"><span class="k">倍率</span><span class="v">${scales}</span></div>
       <div class="info-row"><span class="k">更新时间</span><span class="v">${fmtTime(a.updatedAt)}</span></div>
+    </div>
+    <div class="dl-box">
+      <div class="dl-head">下载<span class="muted">文件名已带前缀</span></div>
+      <div class="dl-rows">
+        <button class="dl-row" data-dl="source">
+          <span>原图</span><em>${isVector ? 'svg 矢量源' : '@' + (a.scales || [3]).slice(-1)[0] + 'x 位图'}</em>
+        </button>
+        <button class="dl-row" data-dl="android">
+          <span>Android ${isVector ? 'XML' : 'PNG'}</span><em>${isVector ? 'VectorDrawable' : 'drawable-xxhdpi'}</em>
+        </button>
+        <button class="dl-row" data-dl="ios">
+          <span>iOS 文件</span><em>imageset 压缩包</em>
+        </button>
+      </div>
     </div>
     <div class="tint-box" ${tintable ? '' : 'hidden'}>
       <label class="tint-toggle">
@@ -334,6 +349,49 @@ function updateSwatchActive() {
   document.querySelectorAll('#assetDetail .swatch').forEach((s) => {
     s.classList.toggle('active', s.dataset.swatch.toLowerCase() === state.tint.color.toLowerCase());
   });
+}
+
+/* ---------------- 下载 ---------------- */
+
+/**
+ * 下载当前资源的某个产物。走 fetch + Blob，而不是直接给 <a download>：
+ * 服务端转换失败时能拿到 JSON 错误并 toast，不会让页面跳到一段报错文本。
+ */
+async function downloadAsset(kind, btn) {
+  const a = state.data.assets.find((x) => x.logical === state.selected);
+  if (!a) return;
+
+  const labels = { source: '原图', android: a.format === 'svg' ? 'VectorDrawable XML' : 'xxhdpi PNG', ios: 'iOS imageset' };
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch(pj(`/assets/${encodeURIComponent(a.logical)}/download?kind=${kind}`));
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try {
+        const j = await res.json();
+        if (j && j.error) msg = j.error;
+      } catch (_) { /* 非 JSON 响应，保留状态码 */ }
+      throw new Error(msg);
+    }
+    const blob = await res.blob();
+    const cd = res.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename="?([^";]+)"?/);
+    const filename = m ? m[1] : a.logical;
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    toast(`已下载 ${filename}（${labels[kind] || kind}）`);
+  } catch (err) {
+    toast('下载失败：' + err.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 /* ---------------- 大图弹窗 ---------------- */
@@ -603,6 +661,11 @@ function bind() {
     const copyEl = e.target.closest('[data-copy]');
     if (copyEl) {
       copyText(copyEl.dataset.copy, `已复制 ${copyEl.dataset.copy}`);
+      return;
+    }
+    const dlBtn = e.target.closest('[data-dl]');
+    if (dlBtn) {
+      downloadAsset(dlBtn.dataset.dl, dlBtn);
       return;
     }
     const actBtn = e.target.closest('[data-act]');

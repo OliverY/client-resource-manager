@@ -10,6 +10,7 @@ const store = require('../lib/store');
 const { probe, isVectorLike } = require('../lib/image');
 const { normalizeLogical, validateLogical, androidName, iosName } = require('../lib/naming');
 const { buildSnapshot, diffSnapshots } = require('../lib/snapshot');
+const { buildDownload } = require('../lib/export');
 const { buildAndroid } = require('../packagers/android');
 const { buildIos } = require('../packagers/ios');
 const { DEFAULT_LIB } = require('../config');
@@ -372,6 +373,26 @@ scoped.post('/assets/:logical/restore', (req, res) => {
   asset.updatedAt = new Date().toISOString();
   store.save(pid, db);
   res.json({ ok: true });
+});
+
+/** 单个资源下载：kind=source 原图 / android 端可直接用的文件（XML 或 PNG） / ios imageset 压缩包 */
+scoped.get('/assets/:logical/download', async (req, res) => {
+  try {
+    const kind = String(req.query.kind || 'source');
+    const db = store.load(req.project.id);
+    const asset = db.assets.find((a) => a.logical === req.params.logical);
+    if (!asset) return res.status(404).json({ ok: false, error: `资源不存在: ${req.params.logical}` });
+
+    const out = await buildDownload(asset, lib(req), kind);
+    res.setHeader('Content-Type', out.contentType);
+    // 文件名统一是带前缀的物理名，下载后可直接放进工程
+    res.setHeader('Content-Disposition', `attachment; filename="${out.filename}"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(out.buffer);
+  } catch (err) {
+    console.error('[download]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 /** 发布：构建三端产物 */

@@ -8,15 +8,15 @@
 #   RESTART=pm2 bash scripts/deploy.sh  # 强制用 pm2 管理（默认 auto：launchd 优先，pm2 兜底）
 #
 # 目标可用环境变量覆盖：
-#   DEPLOY_HOST=host   # 同一台机器的内网 IP 是 host-ip
-#   DEPLOY_USER=<user>                        # macOS 默认禁 root SSH，用 yxj
+#   DEPLOY_HOST=<host>                     # 必填：目标机器的主机名或 IP
+#   DEPLOY_USER=<user>                     # 默认当前用户（macOS 默认禁 root SSH）
 #   DEPLOY_DIR=client-resource-manager DEPLOY_PORT=5173
 #   RESTART=auto|launchd|pm2  LAUNCHD_LABEL=com.example.design.resource-manager
 
 set -euo pipefail
 
-HOST="${DEPLOY_HOST:-host}"
-USER_NAME="${DEPLOY_USER:-yxj}"
+HOST="${DEPLOY_HOST:-}"
+USER_NAME="${DEPLOY_USER:-$(whoami)}"
 REMOTE_DIR="${DEPLOY_DIR:-client-resource-manager}"  # 相对远程 home；也可填绝对路径
 PORT="${DEPLOY_PORT:-5173}"
 APP_NAME="client-resource-manager"
@@ -24,6 +24,11 @@ LAUNCHD_LABEL="${LAUNCHD_LABEL:-com.example.design.resource-manager}"
 RESTART="${RESTART:-auto}"
 SETUP=0
 [[ "${1:-}" == "--setup" ]] && SETUP=1
+
+log()  { printf '\033[1;34m[deploy]\033[0m %s\n' "$*"; }
+fail() { printf '\033[1;31m[deploy]\033[0m %s\n' "$*" >&2; exit 1; }
+
+[[ -n "$HOST" ]] || fail "请先指定目标机器：DEPLOY_HOST=<host> bash scripts/deploy.sh（或用 --setup 首次部署）"
 
 SSH_TARGET="${USER_NAME}@${HOST}"
 
@@ -71,8 +76,11 @@ rsync -az --delete \
   --exclude node_modules/ \
   --exclude data/ \
   --exclude data.backup-before-migration/ \
+  --exclude data.backup-before-wipe-20261016/ \
   --exclude .zcode/ \
+  --exclude .workbuddy/ \
   --exclude .workbuddy-ai/ \
+  --exclude reference/apk-icons/ \
   --exclude logs/ \
   --exclude "*.log" \
   --exclude .DS_Store \
@@ -111,7 +119,7 @@ ssh_run "
 log "健康检查 http://${HOST}:${PORT}/healthz"
 for _ in $(seq 1 10); do
   if curl -fsS -m 3 "http://${HOST}:${PORT}/healthz" >/dev/null 2>&1; then
-    log "✅ 发布成功：http://${HOST}:${PORT}（内网 IP 同样可达：http://host-ip:${PORT}）"
+    log "✅ 发布成功：http://${HOST}:${PORT}"
     log "查看日志：ssh ${SSH_TARGET} 'tail -50 ~/${REMOTE_DIR}/logs/service.log'"
     exit 0
   fi
