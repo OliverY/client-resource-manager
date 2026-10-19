@@ -163,16 +163,21 @@ body {
   transform: translateY(-2px);
 }
 
-.asset-thumb {
+/* 缩略图容器：antd Card 的 `.ant-card-cover > *` 会把 display 重置为 block，
+   这里用 .asset-card 前缀提权，确保图片始终在卡片内水平 + 垂直居中 */
+.asset-card .asset-thumb {
   height: 88px;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 10px;
   background: repeating-conic-gradient(#eef0f4 0% 25%, #fbfcfe 0% 50%) 50% / 16px 16px;
   border-bottom: 1px solid #e4e8f0;
 }
 
-.asset-thumb img {
+.asset-card .asset-thumb img {
+  display: block;
+  margin: 0 auto;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
